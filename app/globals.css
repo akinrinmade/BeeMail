@@ -20,6 +20,7 @@
 
 @theme inline {
   --font-sans: 'Geist', Arial, sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
   --font-mono: 'Geist Mono', monospace;
 }
 
