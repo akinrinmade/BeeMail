@@ -362,7 +362,7 @@ function ComposeFlow({ initialJob, onCancel, onDone }: { initialJob: Job | null;
   </main>
 }
 
-/* ─── Send flow (designed for confidence) ────────���─────────────────────── */
+/* ─── Send flow (designed for confidence) ─────��──���─────────────────────── */
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
 
@@ -492,6 +492,10 @@ function Templates({ onUse }: { onUse: (job: Job) => void }) {
     { label: 'Event invite', desc: 'Clear details, one obvious action.', tone: 'honey', jobId: 'event' },
     { label: 'Client follow-up', desc: 'Warm, and easy to reply to.', tone: 'sage', jobId: 'followup' },
     { label: 'Thank you', desc: 'A thoughtful note with room to breathe.', tone: 'blush', jobId: 'thanks' },
+    { label: 'Meeting request', desc: 'Ask for time without asking too much.', tone: 'sage', jobId: 'meeting' },
+    { label: 'Proposal', desc: 'Confident, structured, easy to skim.', tone: 'honey', jobId: 'proposal' },
+    { label: 'Re-engage', desc: 'A gentle nudge that reopens the door.', tone: 'sky', jobId: 'followup' },
+    { label: 'Launch invite', desc: 'Build anticipation, then point the way.', tone: 'blush', jobId: 'event' },
   ]
   return <main className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto p-5 md:p-10"><PageHeader eyebrow="Start somewhere good" title="Templates" description="Email structures designed around the moments you send most." action={<Button><Search /> Explore all</Button>} /><div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">{map.map(t => { const job = JOBS.find(j => j.id === t.jobId)!; return <button key={t.label} onClick={() => onUse(job)} className="group overflow-hidden rounded-2xl bg-[var(--surface)] text-left ring-1 ring-[var(--line)] transition hover:-translate-y-1 hover:ring-[var(--honey)]"><div className={`h-48 p-6 ${accentBg[t.tone]}`}><div className="h-full rounded-xl bg-[var(--surface)] p-5"><div className="h-3 w-1/2 rounded bg-[var(--deep)]/25" /><div className="mt-3 h-2 w-4/5 rounded bg-[var(--deep)]/10" /><div className="mt-3 h-2 w-3/5 rounded bg-[var(--deep)]/10" /><div className="mt-9 h-7 w-1/3 rounded-md bg-[var(--deep)]" /></div></div><div className="p-5"><h3 className="font-semibold">{t.label}</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">{t.desc}</p><span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[var(--deep)]">Use template <ArrowUpRight /></span></div></button> })}</div></main>
 }
