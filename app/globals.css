@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+:root { --paper:#f4f6f2; --surface:#ffffff; --ink:#17211b; --muted:#718078; --line:#dce5de; --honey:#d99b1d; --sage:#dce9df; --deep:#1e4536; --shadow:0 18px 50px rgba(30,69,54,.08); }
+@theme inline { --font-sans:'Geist', Arial, sans-serif; --font-mono:'Geist Mono', monospace; }
+* { box-sizing:border-box; }
+html,body { margin:0; min-height:100%; background:var(--paper); color:var(--ink); }
+body { font-family:var(--font-sans), Arial, sans-serif; letter-spacing:-.01em; }
+button,input,textarea,select { font:inherit; }
+button { cursor:pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline:2px solid var(--honey); outline-offset:2px; }
+::selection { background:#f1d58e; color:var(--deep); }
+
+/* A quiet layer of polish shared across every BeeMail surface. */
+ h1,h2,h3 { letter-spacing:-.035em; }
+ [class*="rounded-3xl"], [class*="rounded-[2rem]"] { box-shadow:var(--shadow); }
