@@ -2,18 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, ArrowUpRight, Bell, CalendarClock, CalendarDays, Check,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Bell, CalendarClock, CalendarDays, Check,
   CheckCircle2, ChevronDown, Cloud, Copy, Eye, FileImage, FileText, Grid2X2, Heart,
   Image as ImageIcon, LayoutTemplate, Library, Loader2, Mail, Megaphone, Menu, MessageCircle,
-  Monitor, MoreHorizontal, PenLine, Plus, Redo2, Search, Send, Settings as SettingsIcon,
-  ShieldCheck, Smartphone, Sparkles, Trash2, Undo2, Wand2, X,
+  Minus, Monitor, MoreHorizontal, MousePointerClick, PenLine, Plus, Redo2, Search, Send, Settings as SettingsIcon,
+  ShieldCheck, Smartphone, Sparkles, Trash2, Type, Undo2, Wand2, X,
   type LucideIcon,
 } from 'lucide-react'
 
 /* ─── Email document model ─────────────────────────────────────────────── */
 
 type BlockType = 'heading' | 'text' | 'image' | 'button' | 'divider' | 'spacer' | 'social'
-type EmailBlock = { id: number; type: BlockType; title: string; body?: string }
+type EmailBlock = { id: number; type: BlockType; title: string; body?: string; rev?: number }
 type EmailDoc = { title: string; subject: string; blocks: EmailBlock[] }
 
 let blockSeq = 1
@@ -177,20 +177,98 @@ function Button({ children, primary = false, onClick, className = '', type = 'bu
 
 function Logo() { return <div className="flex items-center gap-2 px-2 py-2"><div className="relative grid size-8 place-items-center rounded-[11px] bg-[var(--deep)] text-[var(--honey)] shadow-[0_5px_14px_rgba(30,69,54,.16)]"><span className="font-serif text-xl leading-none">B</span><span className="absolute bottom-1 right-1 size-1.5 rounded-full bg-[var(--honey)]" aria-hidden="true" /></div><span className="font-serif text-[1.45rem] leading-none tracking-[-0.04em]">BeeMail</span></div> }
 
+/* ─── AI text engine ───────────────────────────────────────────────────────
+   Deterministic, believable transforms so the in-editor AI feels reliable
+   rather than random. Each one visibly and correctly changes the copy. */
+
+const CONTRACTIONS: [RegExp, string][] = [
+  [/\bI’m\b/g, 'I am'], [/\bwe’re\b/g, 'we are'], [/\byou’re\b/g, 'you are'],
+  [/\bit’s\b/g, 'it is'], [/\bthat’s\b/g, 'that is'], [/\bhere’s\b/g, 'here is'],
+  [/\bdon’t\b/g, 'do not'], [/\bdoesn’t\b/g, 'does not'], [/\bcan’t\b/g, 'cannot'],
+  [/\bwon’t\b/g, 'will not'], [/\bI’d\b/g, 'I would'], [/\bwe’d\b/g, 'we would'],
+  [/\blet’s\b/g, 'let us'], [/\bI’ll\b/g, 'I will'], [/\bwe’ll\b/g, 'we will'],
+]
+const WARM: [RegExp, string][] = [
+  [/\bI wanted to\b/g, 'I’ve been meaning to'],
+  [/\bHere’s\b/g, 'I’m so glad to share'],
+  [/\bLet me know\b/g, 'I’d genuinely love to hear'],
+  [/\bReach out\b/gi, 'Just say the word'],
+  [/\bHi there\b/g, 'Hello, lovely'],
+]
+const REPHRASE: [RegExp, string][] = [
+  [/\bfollow up\b/gi, 'check in'], [/\bquick\b/gi, 'short'],
+  [/\bgreat\b/gi, 'wonderful'], [/\breach out\b/gi, 'get in touch'],
+  [/\bwe’d love\b/gi, 'we’d be delighted'],
+]
+const apply = (list: [RegExp, string][]) => (s: string) => list.reduce((a, [re, r]) => a.replace(re, r), s)
+const makeFormal = apply(CONTRACTIONS)
+const warmer = apply(WARM)
+const rephrase = apply(REPHRASE)
+const concise = (s: string) => {
+  const parts = s.split(/(?<=[.!?])\s+/).filter(Boolean)
+  return parts.length > 1 ? parts.slice(0, Math.max(1, parts.length - 1)).join(' ') : s
+}
+const EXPAND = ' If it’s helpful, I’m happy to share more whenever the timing’s right.'
+const expand = (s: string) => (/more whenever/.test(s) ? s : `${s.replace(/\s+$/, '')}${EXPAND}`)
+const routeAsk = (t: string): ((s: string) => string) => {
+  const q = t.toLowerCase()
+  if (/(short|concise|tighten|trim|brief|cut)/.test(q)) return concise
+  if (/(formal|professional|polished|serious)/.test(q)) return makeFormal
+  if (/(warm|friendl|kind|personal|human|soft)/.test(q)) return warmer
+  if (/(expand|longer|detail|more|elaborate)/.test(q)) return expand
+  return rephrase
+}
+const bumpBlock = (bl: EmailBlock, fn: (s: string) => string): EmailBlock => ({
+  ...bl, title: fn(bl.title), body: bl.body !== undefined ? fn(bl.body) : bl.body, rev: (bl.rev ?? 0) + 1,
+})
+
+/* ─── Editable (direct manipulation on the canvas) ─────────────────────── */
+
+function Editable({ value, rev = 0, editable = false, onChange, className = '', as = 'div', multiline = false }: {
+  value: string; rev?: number; editable?: boolean; onChange?: (v: string) => void
+  className?: string; as?: 'div' | 'h2' | 'span'; multiline?: boolean
+}) {
+  const ref = useRef<HTMLElement>(null)
+  // Uncontrolled by design: only write to the DOM when the value truly diverges
+  // (AI edit / external change), never on the user's own keystroke — keeps the caret still.
+  useEffect(() => { const el = ref.current; if (el && el.textContent !== value) el.textContent = value }, [value, rev])
+  const Tag = as as any
+  if (!editable) return <Tag className={className}>{value}</Tag>
+  return <Tag
+    ref={ref}
+    contentEditable
+    suppressContentEditableWarning
+    role="textbox"
+    aria-multiline={multiline}
+    tabIndex={0}
+    spellCheck
+    onInput={(e: React.FormEvent<HTMLElement>) => onChange?.(e.currentTarget.textContent || '')}
+    onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' && !multiline) e.preventDefault() }}
+    className={`${className} cursor-text rounded-sm focus:outline-none focus:ring-2 focus:ring-[var(--honey)]/45 focus:ring-offset-2 focus:ring-offset-[var(--surface)]`}
+  />
+}
+
 /* ─── Canvas (shared render of the document model) ─────────────────────── */
 
-function Canvas({ blocks, selected, onSelect, device = 'desktop' }: { blocks: EmailBlock[]; selected: number; onSelect: (id: number) => void; device?: 'desktop' | 'mobile' }) {
+function Canvas({ blocks, selected, onSelect, device = 'desktop', editable = false, onEdit }: {
+  blocks: EmailBlock[]; selected: number; onSelect?: (id: number) => void; device?: 'desktop' | 'mobile'
+  editable?: boolean; onEdit?: (id: number, field: 'title' | 'body', value: string) => void
+}) {
   return <div className={`mx-auto w-full rounded-[1.4rem] bg-[var(--surface)] p-5 shadow-[var(--shadow)] ring-1 ring-[var(--line)]/70 transition-[max-width] duration-300 sm:p-8 ${device === 'mobile' ? 'max-w-[380px]' : 'max-w-[640px]'}`}>
     <div className="rounded-xl bg-[var(--deep)] px-6 py-7 text-center text-[var(--surface)]"><p className="font-serif text-2xl tracking-[-0.03em]">BeeMail</p><div className="mx-auto mt-4 h-px w-10 bg-[var(--honey)]" /></div>
-    <div className="flex flex-col">{blocks.map(block => <button key={block.id} onClick={() => onSelect(block.id)} className={`group relative text-left transition ${selected === block.id ? 'z-10 rounded-lg outline-2 outline-dashed outline-[var(--honey)] outline-offset-4' : 'hover:outline-1 hover:outline-dashed hover:outline-[var(--line)]'}`}>
-      {block.type === 'heading' && <div className="px-5 pb-3 pt-9"><h2 className="font-serif text-4xl leading-none tracking-[-0.04em]">{block.title}</h2></div>}
-      {block.type === 'text' && <div className="px-5 py-4"><p className="whitespace-pre-line text-base leading-7">{block.title}</p>{block.body && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-[var(--muted)]">{block.body}</p>}</div>}
-      {block.type === 'image' && <div className="mx-5 my-5 grid h-44 place-items-center rounded-xl bg-[var(--honey-pale)] text-[var(--deep)]"><ImageIcon /><span className="ml-2 text-sm font-semibold">{block.title}</span></div>}
-      {block.type === 'button' && <div className="px-5 py-5"><span className="inline-flex items-center rounded-full bg-[var(--honey)] px-5 py-3 text-sm font-bold text-[var(--deep)]">{block.title} <ArrowRight className="ml-2" /></span></div>}
-      {block.type === 'divider' && <div className="px-5 py-6"><div className="h-px bg-[var(--line)]" /></div>}
-      {block.type === 'spacer' && <div className="h-8" />}
-      {block.type === 'social' && <div className="flex justify-center gap-4 py-6 text-xs font-bold text-[var(--muted)]">Instagram · LinkedIn · Website</div>}
-    </button>)}</div>
+    <div className="flex flex-col">{blocks.map(block => {
+      const active = selected === block.id
+      const ring = editable ? (active ? 'z-10 rounded-lg outline-2 outline-dashed outline-[var(--honey)] outline-offset-4' : 'rounded-lg hover:outline-1 hover:outline-dashed hover:outline-[var(--line)]') : ''
+      return <div key={block.id} onClick={editable ? () => onSelect?.(block.id) : undefined} className={`group relative text-left transition ${editable ? 'cursor-pointer' : ''} ${ring}`}>
+        {block.type === 'heading' && <div className="px-5 pb-3 pt-9"><Editable as="h2" value={block.title} rev={block.rev} editable={editable} onChange={v => onEdit?.(block.id, 'title', v)} className="font-serif text-4xl leading-none tracking-[-0.04em]" /></div>}
+        {block.type === 'text' && <div className="px-5 py-4"><Editable value={block.title} rev={block.rev} editable={editable} multiline onChange={v => onEdit?.(block.id, 'title', v)} className="whitespace-pre-line text-base leading-7" />{block.body !== undefined && (block.body !== '' || editable) && <Editable value={block.body ?? ''} rev={block.rev} editable={editable} multiline onChange={v => onEdit?.(block.id, 'body', v)} className="mt-3 whitespace-pre-line text-sm leading-6 text-[var(--muted)]" />}</div>}
+        {block.type === 'image' && <div className="mx-5 my-5 grid h-44 place-items-center rounded-xl bg-[var(--honey-pale)] text-[var(--deep)]"><ImageIcon /><span className="ml-2 text-sm font-semibold">{block.title}</span></div>}
+        {block.type === 'button' && <div className="px-5 py-5"><span className="inline-flex items-center rounded-full bg-[var(--honey)] px-5 py-3 text-sm font-bold text-[var(--deep)]"><Editable as="span" value={block.title} rev={block.rev} editable={editable} onChange={v => onEdit?.(block.id, 'title', v)} /> <ArrowRight className="ml-2" /></span></div>}
+        {block.type === 'divider' && <div className="px-5 py-6"><div className="h-px bg-[var(--line)]" /></div>}
+        {block.type === 'spacer' && <div className="h-8" />}
+        {block.type === 'social' && <div className="flex justify-center gap-4 py-6 text-xs font-bold text-[var(--muted)]">Instagram · LinkedIn · Website</div>}
+      </div>
+    })}</div>
     <div className="mt-4 border-t border-[var(--line)] pt-4 text-center text-[11px] leading-5 text-[var(--muted)]">Sent with care via BeeMail · <span className="underline">Unsubscribe</span></div>
   </div>
 }
